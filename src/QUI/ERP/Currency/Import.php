@@ -101,6 +101,10 @@ class Import
                     'rate' => $rate
                 ]);
             } catch (QUI\Exception $Exception) {
+                if ($Exception->getCode() === 404) {
+                    continue;
+                }
+
                 QUI\System\Log::writeException($Exception, QUI\System\Log::LEVEL_WARNING);
             }
         }
