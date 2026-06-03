@@ -593,7 +593,7 @@
             <en><![CDATA[&nbsp;]]></en>
         </locale>
 
-        <locale name="currency.ISK.sign">
+        <locale name="currency.ISK.text">
             <de><![CDATA[Isländische Krone]]></de>
             <en><![CDATA[Icelandic krona]]></en>
         </locale>
