@@ -94,7 +94,7 @@ interface CurrencyInterface
     /**
      * Format an amount
      *
-     * @param float|string $amount
+     * @param float|int|string|null $amount
      * @param null|QUI\Locale $Locale - optional, locale object
      * @return string
      */

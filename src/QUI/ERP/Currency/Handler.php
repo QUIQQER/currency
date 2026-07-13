@@ -3,6 +3,7 @@
 namespace QUI\ERP\Currency;
 
 use Exception;
+use Doctrine\DBAL\Exception as DbalException;
 use QUI;
 use QUI\Interfaces\Users\User;
 use QUI\Locale;
@@ -89,11 +90,15 @@ class Handler
             ]);
         }
 
-        QUI::getDataBase()->insert(self::table(), [
-            'currency' => $currency,
-            'rate' => (float)$rate,
-            'type' => self::existsCurrencyType($type) ? $type : self::CURRENCY_TYPE_DEFAULT
+        QUI::getDataBaseConnection()->insert(QUI\Utils\Doctrine::quoteIdentifier(self::table()), [
+            QUI\Utils\Doctrine::quoteIdentifier('currency') => $currency,
+            QUI\Utils\Doctrine::quoteIdentifier('rate') => (float)$rate,
+            QUI\Utils\Doctrine::quoteIdentifier('type') => self::existsCurrencyType($type)
+                ? $type
+                : self::CURRENCY_TYPE_DEFAULT
         ]);
+
+        self::clearCaches();
 
         // create translations
         $localeGroup = 'quiqqer/currency';
@@ -166,9 +171,11 @@ class Handler
     {
         QUI\Permissions\Permission::checkPermission('currency.delete');
 
-        QUI::getDataBase()->delete(self::table(), [
-            'currency' => $currency
+        QUI::getDataBaseConnection()->delete(QUI\Utils\Doctrine::quoteIdentifier(self::table()), [
+            QUI\Utils\Doctrine::quoteIdentifier('currency') => $currency
         ]);
+
+        self::clearCaches();
 
         QUI\Translator::delete(
             'quiqqer/currency',
@@ -352,17 +359,19 @@ class Handler
     {
         if (!self::$currencies) {
             try {
-                $data = QUI::getDataBase()->fetch([
-                    'from' => self::table()
-                ]);
-            } catch (QUI\Exception $Exception) {
+                $data = QUI::getQueryBuilder()
+                    ->select('*')
+                    ->from(QUI\Utils\Doctrine::quoteIdentifier(self::table()))
+                    ->executeQuery()
+                    ->fetchAllAssociative();
+            } catch (DbalException $Exception) {
                 QUI\System\Log::addError($Exception->getMessage());
 
                 return [];
             }
 
             foreach ($data as $entry) {
-                if (!is_array($entry) || !isset($entry['currency']) || !is_string($entry['currency'])) {
+                if (!isset($entry['currency']) || !is_string($entry['currency'])) {
                     continue;
                 }
 
@@ -505,7 +514,7 @@ class Handler
         QUI\Permissions\Permission::checkPermission('currency.edit');
 
         // check if currency exists
-        self::getCurrency($currency);
+        $Currency = self::getCurrency($currency);
 
         $dbData = [];
 
@@ -529,11 +538,33 @@ class Handler
             $dbData['precision'] = (int)$data['precision'];
         }
 
-        QUI::getDataBase()->update(
-            Handler::table(),
-            $dbData,
-            ['currency' => $currency]
+        if ($dbData === []) {
+            return;
+        }
+
+        $quotedDbData = [];
+
+        foreach ($dbData as $column => $value) {
+            $quotedDbData[QUI\Utils\Doctrine::quoteIdentifier($column)] = $value;
+        }
+
+        QUI::getDataBaseConnection()->update(
+            QUI\Utils\Doctrine::quoteIdentifier(self::table()),
+            $quotedDbData,
+            [QUI\Utils\Doctrine::quoteIdentifier('currency') => $Currency->getCode()]
         );
+
+        self::clearCaches();
+    }
+
+    /**
+     * Clear request-local and shared currency caches after a database mutation.
+     */
+    private static function clearCaches(): void
+    {
+        self::$currencies = [];
+        self::$Default = null;
+        self::$RuntimeCurrency = null;
 
         QUI\Cache\Manager::clear('quiqqer/currency/list');
     }
