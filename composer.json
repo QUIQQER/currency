@@ -3,20 +3,26 @@
     "type": "quiqqer-module",
     "description": "Integrates different currencies in QUIQQER",
     "license": "GPL-3.0-or-later",
+    "homepage": "https://www.quiqqer.com",
     "authors": [
         {
-            "name": "Henning Leutz",
-            "email": "leutz@pcsg.de",
-            "homepage": "https://www.pcsg.de",
-            "role": "Developer"
+            "name": "PCSG - Computer & Internet Service OHG",
+            "email": "info@quiqqer.com",
+            "homepage": "https://www.quiqqer.com",
+            "role": "Maintainer"
         }
     ],
     "support": {
-        "email": "support@pcsg.de"
+        "email": "support@pcsg.de",
+        "issues": "https://dev.quiqqer.com/quiqqer/currency/-/issues",
+        "source": "https://dev.quiqqer.com/quiqqer/currency"
     },
     "require": {
-        "php": "^8.1",
+        "php": "^8.2",
+        "ext-curl": "*",
+        "ext-dom": "*",
         "ext-intl": "*",
+        "ext-mbstring": "*",
         "quiqqer/core": "^2",
         "quiqqer/qui": "^1"
     },
