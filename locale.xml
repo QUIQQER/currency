@@ -203,8 +203,8 @@
             <en><![CDATA[QUIQQER - Currency]]></en>
         </locale>
         <locale name="package.description" html="true">
-            <de><![CDATA[Integriert verschiedenen Währung in QUIQQER]]></de>
-            <en><![CDATA[Integrates various currency into QUIQQER]]></en>
+            <de><![CDATA[Integriert verschiedene Währungen in QUIQQER]]></de>
+            <en><![CDATA[Integrates multiple currencies into QUIQQER]]></en>
         </locale>
 
         <!-- permissions -->

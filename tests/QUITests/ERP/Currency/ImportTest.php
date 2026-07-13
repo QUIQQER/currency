@@ -17,9 +17,11 @@ class ImportTest extends TestCase
             );
         }
 
-        $result = QUI::getDataBase()->fetch([
-            'from' => QUI\ERP\Currency\Handler::table()
-        ]);
+        $result = QUI::getQueryBuilder()
+            ->select('*')
+            ->from(QUI\Utils\Doctrine::quoteIdentifier(QUI\ERP\Currency\Handler::table()))
+            ->executeQuery()
+            ->fetchAllAssociative();
 
         $this->assertNotEmpty($result);
     }

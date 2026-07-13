@@ -7,6 +7,8 @@ use QUI;
 
 class HandlerTest extends TestCase
 {
+    private ?string $fixtureCurrency = null;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -14,6 +16,15 @@ class HandlerTest extends TestCase
         if (empty(QUI\ERP\Currency\Handler::getData())) {
             $this->markTestSkipped('Handler tests require seeded currency data (DB-backed).');
         }
+    }
+
+    protected function tearDown(): void
+    {
+        if ($this->fixtureCurrency !== null && QUI\ERP\Currency\Handler::existCurrency($this->fixtureCurrency)) {
+            QUI\ERP\Currency\Handler::deleteCurrency($this->fixtureCurrency);
+        }
+
+        parent::tearDown();
     }
 
     public function testGetDefaultCurrency(): void
@@ -66,5 +77,31 @@ class HandlerTest extends TestCase
                 in_array($Currency->getCode(), $allowed, true) || $Currency->getCode() === $default
             );
         }
+    }
+
+    public function testCreateUpdateAndDeleteCurrencyRefreshesCachedData(): void
+    {
+        $this->fixtureCurrency = 'T' . strtoupper(substr(md5((string)microtime(true)), 0, 4));
+
+        QUI\ERP\Currency\Handler::createCurrency($this->fixtureCurrency, 1.25);
+
+        $Currency = QUI\ERP\Currency\Handler::getCurrency($this->fixtureCurrency);
+        $this->assertSame(1.25, $Currency->getExchangeRate());
+
+        QUI\ERP\Currency\Handler::updateCurrency($Currency, [
+            'rate' => 1.5,
+            'precision' => 3
+        ]);
+
+        $UpdatedCurrency = QUI\ERP\Currency\Handler::getCurrency($this->fixtureCurrency);
+        $this->assertSame(1.5, $UpdatedCurrency->getExchangeRate());
+        $this->assertSame(3, $UpdatedCurrency->getPrecision());
+
+        QUI\ERP\Currency\Handler::updateCurrency($UpdatedCurrency, []);
+
+        QUI\ERP\Currency\Handler::deleteCurrency($this->fixtureCurrency);
+        $this->fixtureCurrency = null;
+
+        $this->assertFalse(QUI\ERP\Currency\Handler::existCurrency($UpdatedCurrency->getCode()));
     }
 }
