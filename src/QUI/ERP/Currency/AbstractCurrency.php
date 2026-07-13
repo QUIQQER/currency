@@ -214,12 +214,16 @@ abstract class AbstractCurrency implements CurrencyInterface
     /**
      * Format an amount
      *
-     * @param float|string $amount
+     * @param float|int|string|null $amount
      * @param null|QUI\Locale $Locale - optional, locale object
      * @return string
      */
     public function format($amount, null | QUI\Locale $Locale = null): string
     {
+        if ($amount === null) {
+            $amount = 0;
+        }
+
         $Locale = $Locale ?? $this->Locale ?? QUI::getLocale();
 
         $localeCode = $Locale->getLocalesByLang($Locale->getCurrent());
