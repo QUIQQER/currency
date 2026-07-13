@@ -3,16 +3,12 @@
 
     <global>
         <table name="currency">
-            <field type="varchar(5) COLLATE utf8_unicode_ci NOT NULL">currency</field>
-            <field type="varchar(255)">rate</field>
-            <field type="int(1) DEFAULT 0">autoupdate</field>
-            <field type="int(2) DEFAULT 2">precision</field>
-
-            <field type="varchar(255) NOT NULL DEFAULT 'default'">type</field>
-            <field type="TEXT NULL DEFAULT NULL">customData</field>
-
-            <primary>currency</primary>
-            <index>currency</index>
+            <field type="string" length="5" primary="true">currency</field>
+            <field type="float" default="1">rate</field>
+            <field type="boolean" default="0">autoupdate</field>
+            <field type="smallint" default="2">precision</field>
+            <field type="string" length="255" default="default">type</field>
+            <field type="text" nullable="true" default="null">customData</field>
         </table>
     </global>
 
