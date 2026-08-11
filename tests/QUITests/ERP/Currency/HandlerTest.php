@@ -79,6 +79,41 @@ class HandlerTest extends TestCase
         }
     }
 
+    public function testDisallowedUserCurrencyFallsBackToDefaultCurrency(): void
+    {
+        $this->fixtureCurrency = 'T' . strtoupper(substr(md5((string)microtime(true)), 0, 4));
+        QUI\ERP\Currency\Handler::createCurrency($this->fixtureCurrency);
+
+        $User = $this->createMock(QUI\Interfaces\Users\User::class);
+        $User->method('getAttribute')
+            ->with('quiqqer.erp.currency')
+            ->willReturn($this->fixtureCurrency);
+
+        $Currency = QUI\ERP\Currency\Handler::getUserCurrency($User);
+
+        $this->assertSame(
+            QUI\ERP\Currency\Handler::getDefaultCurrency()->getCode(),
+            $Currency?->getCode()
+        );
+    }
+
+    public function testDisallowedRuntimeCurrencyFallsBackToDefaultCurrency(): void
+    {
+        $this->fixtureCurrency = 'T' . strtoupper(substr(md5((string)microtime(true)), 0, 4));
+        QUI\ERP\Currency\Handler::createCurrency($this->fixtureCurrency);
+
+        QUI\ERP\Currency\Handler::setRuntimeCurrency(
+            QUI\ERP\Currency\Handler::getCurrency($this->fixtureCurrency)
+        );
+
+        $Currency = QUI\ERP\Currency\Handler::getRuntimeCurrency();
+
+        $this->assertSame(
+            QUI\ERP\Currency\Handler::getDefaultCurrency()->getCode(),
+            $Currency->getCode()
+        );
+    }
+
     public function testCreateUpdateAndDeleteCurrencyRefreshesCachedData(): void
     {
         $this->fixtureCurrency = 'T' . strtoupper(substr(md5((string)microtime(true)), 0, 4));
