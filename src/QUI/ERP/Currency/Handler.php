@@ -690,7 +690,7 @@ class Handler
         }
 
         $Session = QUI::getSession();
-        $runtimeCode = $Session?->get('currency');
+        $runtimeCode = $Session->get('currency');
 
         if (is_string($runtimeCode) && $runtimeCode !== '') {
             try {
@@ -723,7 +723,7 @@ class Handler
         self::$RuntimeCurrency = $currency;
 
         if (QUI::isFrontend()) {
-            QUI::getSession()?->set('currency', $currency->getCode());
+            QUI::getSession()->set('currency', $currency->getCode());
         }
     }
 
