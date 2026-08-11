@@ -241,7 +241,9 @@ class Handler
             $User = QUI::getUserBySession();
         }
 
-        if (!$User->getAttribute('quiqqer.erp.currency')) {
+        $userCurrency = $User->getAttribute('quiqqer.erp.currency');
+
+        if (!is_string($userCurrency) || $userCurrency === '') {
             $Currency = self::getUserCurrencyByCountry($User);
 
             if ($Currency) {
@@ -252,9 +254,13 @@ class Handler
         }
 
         try {
-            return self::getCurrency(
-                $User->getAttribute('quiqqer.erp.currency')
-            );
+            $Currency = self::getCurrency($userCurrency);
+
+            if (self::isAllowedCurrency($Currency)) {
+                return $Currency;
+            }
+
+            return self::getDefaultCurrency();
         } catch (Exception $Exception) {
             QUI\System\Log::writeDebugException($Exception);
         }
@@ -348,6 +354,20 @@ class Handler
         }
 
         return $list;
+    }
+
+    /**
+     * Check if a currency may be used in the frontend.
+     */
+    private static function isAllowedCurrency(Currency $Currency): bool
+    {
+        foreach (self::getAllowedCurrencies() as $AllowedCurrency) {
+            if ($AllowedCurrency->getCode() === $Currency->getCode()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -662,7 +682,11 @@ class Handler
     public static function getRuntimeCurrency(): Currency
     {
         if (self::$RuntimeCurrency) {
-            return self::$RuntimeCurrency;
+            if (self::isAllowedCurrency(self::$RuntimeCurrency)) {
+                return self::$RuntimeCurrency;
+            }
+
+            return self::setDefaultRuntimeCurrency();
         }
 
         $Session = QUI::getSession();
@@ -671,8 +695,13 @@ class Handler
         if (is_string($runtimeCode) && $runtimeCode !== '') {
             try {
                 $Currency = self::getCurrency($runtimeCode);
-                self::$RuntimeCurrency = $Currency;
-                return self::$RuntimeCurrency;
+
+                if (self::isAllowedCurrency($Currency)) {
+                    self::$RuntimeCurrency = $Currency;
+                    return self::$RuntimeCurrency;
+                }
+
+                return self::setDefaultRuntimeCurrency();
             } catch (QUI\Exception) {
             }
         }
@@ -686,15 +715,7 @@ class Handler
             }
         }
 
-        $Currency = self::getDefaultCurrency();
-
-        if ($Currency instanceof Currency) {
-            self::$RuntimeCurrency = $Currency;
-            return $Currency;
-        }
-
-        self::$RuntimeCurrency = self::getCurrency('EUR');
-        return self::$RuntimeCurrency;
+        return self::setDefaultRuntimeCurrency();
     }
 
     public static function setRuntimeCurrency(Currency $currency): void
@@ -704,6 +725,19 @@ class Handler
         if (QUI::isFrontend()) {
             QUI::getSession()?->set('currency', $currency->getCode());
         }
+    }
+
+    private static function setDefaultRuntimeCurrency(): Currency
+    {
+        $Currency = self::getDefaultCurrency();
+
+        if (!$Currency instanceof Currency) {
+            $Currency = self::getCurrency('EUR');
+        }
+
+        self::setRuntimeCurrency($Currency);
+
+        return $Currency;
     }
 
     //endregion
