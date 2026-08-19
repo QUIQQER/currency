@@ -101,6 +101,106 @@ class HandlerBehaviorTest extends DatabaseTestCase
         self::assertSame('EUR', Handler::getRuntimeCurrency()->getCode());
     }
 
+    public function testFrontendAndBackendCurrencyActivationAreIndependent(): void
+    {
+        $this->configurePackage('EUR', 'USD', 'GBP,TST');
+        $this->resetHandlerState();
+
+        self::assertSame(
+            ['USD', 'EUR'],
+            array_map(static fn(Currency $Currency): string => $Currency->getCode(), Handler::getFrontendCurrencies())
+        );
+        self::assertSame(
+            ['GBP', 'TST', 'EUR'],
+            array_map(static fn(Currency $Currency): string => $Currency->getCode(), Handler::getBackendCurrencies())
+        );
+
+        $BackendOnlyUser = $this->createMock(QUI\Interfaces\Users\User::class);
+        $BackendOnlyUser->method('getAttribute')->with('quiqqer.erp.currency')->willReturn('TST');
+        self::assertSame('EUR', Handler::getUserCurrency($BackendOnlyUser)?->getCode());
+
+        $this->configurePackage('EUR', 'USD,GBP', '__frontend__');
+        $this->resetHandlerState();
+
+        self::assertSame(
+            ['USD', 'GBP', 'EUR'],
+            array_map(static fn(Currency $Currency): string => $Currency->getCode(), Handler::getBackendCurrencies())
+        );
+
+        $this->configurePackage('EUR', 'USD', false);
+        $this->resetHandlerState();
+
+        self::assertSame(
+            ['USD', 'EUR'],
+            array_map(static fn(Currency $Currency): string => $Currency->getCode(), Handler::getBackendCurrencies())
+        );
+    }
+
+    public function testAllowedCurrencyActivationIsValidatedAndPersisted(): void
+    {
+        $values = [
+            'defaultCurrency' => 'EUR',
+            'allowedCurrencies' => 'USD',
+            'allowedBackendCurrencies' => '__frontend__'
+        ];
+        $Config = $this->createMock(QUI\Config::class);
+        $Config->method('getValue')->willReturnCallback(
+            static function (string $section, string $key) use (&$values): mixed {
+                return $values[$key] ?? false;
+            }
+        );
+        $Config->expects(self::exactly(2))->method('setValue')->willReturnCallback(
+            static function (string $section, ?string $key, string|int|float $value) use (&$values): bool {
+                self::assertSame('currency', $section);
+                self::assertNotNull($key);
+                $values[$key] = $value;
+
+                return true;
+            }
+        );
+        $Config->expects(self::exactly(2))->method('save');
+
+        $Package = $this->createPackage($Config, true, []);
+        $Manager = $this->createMock(QUI\Package\Manager::class);
+        $Manager->method('getInstalled')->willReturn([['name' => 'quiqqer/currency']]);
+        $Manager->method('getInstalledPackage')->with('quiqqer/currency')->willReturn($Package);
+        QUI::$PackageManager = $Manager;
+        $this->resetHandlerState();
+
+        Handler::setAllowedCurrencies(Handler::CONTEXT_FRONTEND, [' GBP ', 'GBP']);
+        Handler::setAllowedCurrencies(Handler::CONTEXT_BACKEND, ['TST']);
+
+        self::assertSame('GBP,EUR', $values['allowedCurrencies']);
+        self::assertSame('TST,EUR', $values['allowedBackendCurrencies']);
+        self::assertSame(
+            ['GBP', 'EUR'],
+            array_map(static fn(Currency $Currency): string => $Currency->getCode(), Handler::getFrontendCurrencies())
+        );
+        self::assertSame(
+            ['TST', 'EUR'],
+            array_map(static fn(Currency $Currency): string => $Currency->getCode(), Handler::getBackendCurrencies())
+        );
+    }
+
+    public function testAllowedCurrencyActivationRejectsInvalidInput(): void
+    {
+        foreach (
+            [
+                static fn() => Handler::getAllowedCurrencies('invalid'),
+                static fn() => Handler::setAllowedCurrencies('invalid', ['USD']),
+                static fn() => Handler::setAllowedCurrencies(Handler::CONTEXT_FRONTEND, [12]),
+                static fn() => Handler::setAllowedCurrencies(Handler::CONTEXT_FRONTEND, ['UNKNOWN'])
+            ] as $operation
+        ) {
+            try {
+                $operation();
+                self::fail('Invalid activation input must be rejected.');
+            } catch (QUI\Exception $Exception) {
+                self::assertNotSame('', $Exception->getMessage());
+            }
+        }
+    }
+
     public function testMissingDefaultConfigurationFallsBackToEuro(): void
     {
         $this->configurePackage('', 'USD');
@@ -207,9 +307,9 @@ class HandlerBehaviorTest extends DatabaseTestCase
         ));
     }
 
-    private function configurePackage(string $default, mixed $allowed): void
+    private function configurePackage(string $default, mixed $allowed, mixed $allowedBackend = false): void
     {
-        $Config = $this->createConfig($default, $allowed);
+        $Config = $this->createConfig($default, $allowed, $allowedBackend);
         $Package = $this->createPackage($Config, true, []);
         $Manager = $this->createMock(QUI\Package\Manager::class);
         $Manager->method('getInstalled')->willReturn([['name' => 'quiqqer/currency']]);
@@ -217,14 +317,15 @@ class HandlerBehaviorTest extends DatabaseTestCase
         QUI::$PackageManager = $Manager;
     }
 
-    private function createConfig(string $default, mixed $allowed): QUI\Config
+    private function createConfig(string $default, mixed $allowed, mixed $allowedBackend = false): QUI\Config
     {
         $Config = $this->createMock(QUI\Config::class);
         $Config->method('getValue')->willReturnCallback(
-            static function (string $section, string $key) use ($default, $allowed): mixed {
+            static function (string $section, string $key) use ($default, $allowed, $allowedBackend): mixed {
                 return match ([$section, $key]) {
                     ['currency', 'defaultCurrency'] => $default,
                     ['currency', 'allowedCurrencies'] => $allowed,
+                    ['currency', 'allowedBackendCurrencies'] => $allowedBackend,
                     default => false
                 };
             }

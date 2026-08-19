@@ -10,13 +10,17 @@
  * @return array
  */
 
-QUI::getAjax()->registerFunction('package_quiqqer_currency_ajax_getAllowedCurrencies', function () {
-    $allowed = QUI\ERP\Currency\Handler::getAllowedCurrencies();
-    $result = [];
+QUI::getAjax()->registerFunction(
+    'package_quiqqer_currency_ajax_getAllowedCurrencies',
+    function ($context = null) {
+        $allowed = QUI\ERP\Currency\Handler::getAllowedCurrencies($context);
+        $result = [];
 
-    foreach ($allowed as $Currency) {
-        $result[] = $Currency->toArray();
-    }
+        foreach ($allowed as $Currency) {
+            $result[] = $Currency->toArray();
+        }
 
-    return $result;
-});
+        return $result;
+    },
+    ['context']
+);

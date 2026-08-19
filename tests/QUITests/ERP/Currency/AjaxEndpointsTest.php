@@ -15,6 +15,11 @@ class AjaxEndpointsTest extends DatabaseTestCase
     /** @var array<string, mixed> */
     private array $originalPermissions;
 
+    /** @var array<string, mixed> */
+    private array $configValues = [];
+
+    private int $configSaveCount = 0;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -54,10 +59,28 @@ class AjaxEndpointsTest extends DatabaseTestCase
         $allowed = $this->invokeEndpoint(
             'getAllowedCurrencies.php',
             'package_quiqqer_currency_ajax_getAllowedCurrencies',
-            [],
-            false
+            ['context'],
+            false,
+            Handler::CONTEXT_FRONTEND
         );
         self::assertSame(['USD', 'GBP', 'EUR'], array_column($allowed, 'code'));
+
+        $implicitFrontend = $this->invokeEndpoint(
+            'getAllowedCurrencies.php',
+            'package_quiqqer_currency_ajax_getAllowedCurrencies',
+            ['context'],
+            false
+        );
+        self::assertSame(['USD', 'GBP', 'EUR'], array_column($implicitFrontend, 'code'));
+
+        $backend = $this->invokeEndpoint(
+            'getAllowedCurrencies.php',
+            'package_quiqqer_currency_ajax_getAllowedCurrencies',
+            ['context'],
+            false,
+            Handler::CONTEXT_BACKEND
+        );
+        self::assertSame(['TST', 'EUR'], array_column($backend, 'code'));
 
         $types = $this->invokeEndpoint(
             'getCurrencyTypes.php',
@@ -158,6 +181,54 @@ class AjaxEndpointsTest extends DatabaseTestCase
         self::assertSame(2.75, (float)$stored['rate']);
         self::assertSame(5, (int)$stored['precision']);
         self::assertSame(['channel' => 'ajax'], json_decode((string)$stored['customData'], true));
+    }
+
+    public function testCurrencyActivationEndpointPersistsValidatedContextLists(): void
+    {
+        $frontend = $this->invokeEndpoint(
+            'setAllowedCurrencies.php',
+            'package_quiqqer_currency_ajax_setAllowedCurrencies',
+            ['context', 'currencies'],
+            'Permission::checkAdminUser',
+            Handler::CONTEXT_FRONTEND,
+            json_encode(['GBP'], JSON_THROW_ON_ERROR)
+        );
+        $backend = $this->invokeEndpoint(
+            'setAllowedCurrencies.php',
+            'package_quiqqer_currency_ajax_setAllowedCurrencies',
+            ['context', 'currencies'],
+            'Permission::checkAdminUser',
+            Handler::CONTEXT_BACKEND,
+            json_encode(['TST'], JSON_THROW_ON_ERROR)
+        );
+
+        self::assertSame('GBP,EUR', $this->configValues['allowedCurrencies']);
+        self::assertSame('TST,EUR', $this->configValues['allowedBackendCurrencies']);
+        self::assertSame(['GBP', 'EUR'], array_column($frontend, 'code'));
+        self::assertSame(['TST', 'EUR'], array_column($backend, 'code'));
+        self::assertSame(2, $this->configSaveCount);
+    }
+
+    public function testCurrencyActivationEndpointRejectsInvalidPayloads(): void
+    {
+        foreach (['{invalid', '"USD"'] as $payload) {
+            try {
+                $this->invokeEndpoint(
+                    'setAllowedCurrencies.php',
+                    'package_quiqqer_currency_ajax_setAllowedCurrencies',
+                    ['context', 'currencies'],
+                    'Permission::checkAdminUser',
+                    Handler::CONTEXT_FRONTEND,
+                    $payload
+                );
+                self::fail('Invalid JSON currency payloads must be rejected.');
+            } catch (QUI\Exception $Exception) {
+                self::assertSame('Invalid currency list.', $Exception->getMessage());
+            }
+        }
+
+        self::assertSame('USD,GBP', $this->configValues['allowedCurrencies']);
+        self::assertSame(0, $this->configSaveCount);
     }
 
     public function testUserCurrencyEndpointRejectsDisallowedAndPersistsAllowedSelection(): void
@@ -264,14 +335,28 @@ class AjaxEndpointsTest extends DatabaseTestCase
 
     private function configurePackage(): void
     {
+        $this->configValues = [
+            'defaultCurrency' => 'EUR',
+            'allowedCurrencies' => 'USD,GBP',
+            'allowedBackendCurrencies' => 'TST'
+        ];
+        $this->configSaveCount = 0;
         $Config = $this->createMock(QUI\Config::class);
         $Config->method('getValue')->willReturnCallback(
-            static fn(string $section, string $key): mixed => match ($key) {
-                'defaultCurrency' => 'EUR',
-                'allowedCurrencies' => 'USD,GBP',
-                default => false
+            fn(string $section, string $key): mixed => $this->configValues[$key] ?? false
+        );
+        $Config->method('setValue')->willReturnCallback(
+            function (string $section, ?string $key, string|int|float $value): bool {
+                self::assertSame('currency', $section);
+                self::assertNotNull($key);
+                $this->configValues[$key] = $value;
+
+                return true;
             }
         );
+        $Config->method('save')->willReturnCallback(function (): void {
+            $this->configSaveCount++;
+        });
         $Package = $this->createMock(QUI\Package\Package::class);
         $Package->method('getConfig')->willReturn($Config);
         $Package->method('isQuiqqerPackage')->willReturn(true);
