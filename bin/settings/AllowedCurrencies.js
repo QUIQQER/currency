@@ -23,6 +23,8 @@ define('package/quiqqer/currency/bin/settings/AllowedCurrencies', [
     'use strict';
 
     const lg = 'quiqqer/currency';
+    const CONTEXT_FRONTEND = 'frontend';
+    const CONTEXT_BACKEND = 'backend';
 
     return new Class({
 
@@ -40,7 +42,8 @@ define('package/quiqqer/currency/bin/settings/AllowedCurrencies', [
         ],
 
         options: {
-            values: {}
+            frontendValues: {},
+            backendValues: {}
         },
 
         initialize: function (options) {
@@ -131,8 +134,14 @@ define('package/quiqqer/currency/bin/settings/AllowedCurrencies', [
                         width: 100
                     },
                     {
-                        header: QUILocale.get(lg, 'grid.setting.allowed'),
-                        dataIndex: 'allowed',
+                        header: QUILocale.get(lg, 'grid.setting.frontend'),
+                        dataIndex: 'frontend',
+                        dataType: 'QUI',
+                        width: 100
+                    },
+                    {
+                        header: QUILocale.get(lg, 'grid.setting.backend'),
+                        dataIndex: 'backend',
                         dataType: 'QUI',
                         width: 100
                     },
@@ -225,22 +234,7 @@ define('package/quiqqer/currency/bin/settings/AllowedCurrencies', [
 
             this.$Grid.showLoader();
 
-            this.getAllowedCurrencies().then((result) => {
-                this.$Input.value = result.map((currency) => {
-                    return currency.code;
-                }).join(',');
-
-                let i, len;
-                let values = {};
-                let value = this.$Input.value.split(',');
-
-                for (i = 0, len = value.length; i < len; i++) {
-                    values[value[i]] = 1;
-                }
-
-                this.setAttribute('values', values);
-                this.$Grid.refresh();
-            });
+            this.$loadCurrencyStatus();
         },
 
         /**
@@ -250,16 +244,9 @@ define('package/quiqqer/currency/bin/settings/AllowedCurrencies', [
             this.$Grid.showLoader();
 
             return this.getCurrencies().then((list) => {
-                let data = [],
-                    values = this.getAttribute('values');
-
-                for (let i in list) {
-                    if (!list.hasOwnProperty(i)) {
-                        continue;
-                    }
-
-                    data.push(list[i]);
-                }
+                const frontendValues = this.getAttribute('frontendValues');
+                const backendValues = this.getAttribute('backendValues');
+                let data = Object.keys(list).map((key) => list[key]);
 
                 let perPage = this.$Grid.options.perPage,
                     page = this.$Grid.options.page,
@@ -268,23 +255,33 @@ define('package/quiqqer/currency/bin/settings/AllowedCurrencies', [
 
                 data = data.splice(start, perPage);
 
-                data.each(function (entry, i) {
-                    data[i].allowed = new QUISwitch({
-                        status: (typeof values[entry.code] !== 'undefined'),
+                data.forEach((entry, index) => {
+                    data[index].frontend = new QUISwitch({
+                        status: Object.prototype.hasOwnProperty.call(frontendValues, entry.code),
                         currency: entry.code,
+                        context: CONTEXT_FRONTEND,
                         events: {
                             onChange: this.$onCurrencyStatusChange
                         }
                     });
 
-                    data[i].autoupdate = new QUISwitch({
+                    data[index].backend = new QUISwitch({
+                        status: Object.prototype.hasOwnProperty.call(backendValues, entry.code),
+                        currency: entry.code,
+                        context: CONTEXT_BACKEND,
+                        events: {
+                            onChange: this.$onCurrencyStatusChange
+                        }
+                    });
+
+                    data[index].autoupdate = new QUISwitch({
                         status: entry.autoupdate,
                         currency: entry.code,
                         events: {
                             onChange: this.$changeAutoUpdate
                         }
                     });
-                }.bind(this));
+                });
 
                 this.$Grid.setData({
                     data: data,
@@ -315,11 +312,11 @@ define('package/quiqqer/currency/bin/settings/AllowedCurrencies', [
          */
         update: function () {
             const allowed = [],
-                values = this.getAttribute('values');
+                values = this.getAttribute('frontendValues');
 
-            if (typeOf(values) === 'object') {
+            if (values && typeof values === 'object') {
                 for (const i in values) {
-                    if (!values.hasOwnProperty(i)) {
+                    if (!Object.prototype.hasOwnProperty.call(values, i)) {
                         continue;
                     }
 
@@ -350,12 +347,60 @@ define('package/quiqqer/currency/bin/settings/AllowedCurrencies', [
          *
          * @returns {Promise}
          */
-        getAllowedCurrencies: function () {
+        getAllowedCurrencies: function (context) {
             return new Promise((resolve, reject) => {
                 QUIAjax.get('package_quiqqer_currency_ajax_getAllowedCurrencies', resolve, {
                     'package': 'quiqqer/currency',
+                    context: context,
                     onError: reject
                 });
+            });
+        },
+
+        /**
+         * Persist the active currencies for one application context.
+         *
+         * @param {String} context
+         * @param {Array} currencies
+         * @returns {Promise}
+         */
+        setAllowedCurrencies: function (context, currencies) {
+            return new Promise((resolve, reject) => {
+                QUIAjax.post('package_quiqqer_currency_ajax_setAllowedCurrencies', resolve, {
+                    'package': 'quiqqer/currency',
+                    context: context,
+                    currencies: JSON.stringify(currencies),
+                    onError: reject
+                });
+            });
+        },
+
+        /**
+         * Load frontend and backend activation state.
+         *
+         * @returns {Promise}
+         */
+        $loadCurrencyStatus: function () {
+            return Promise.all([
+                this.getAllowedCurrencies(CONTEXT_FRONTEND),
+                this.getAllowedCurrencies(CONTEXT_BACKEND)
+            ]).then((result) => {
+                const frontendValues = {};
+                const backendValues = {};
+
+                result[0].forEach((currency) => {
+                    frontendValues[currency.code] = true;
+                });
+
+                result[1].forEach((currency) => {
+                    backendValues[currency.code] = true;
+                });
+
+                this.setAttribute('frontendValues', frontendValues);
+                this.setAttribute('backendValues', backendValues);
+                this.update();
+
+                return this.$Grid.refresh();
             });
         },
 
@@ -402,32 +447,39 @@ define('package/quiqqer/currency/bin/settings/AllowedCurrencies', [
          */
         $onCurrencyStatusChange: function (Switch) {
             const currency = Switch.getAttribute('currency');
-            const values = this.getAttribute('values');
-
+            const context = Switch.getAttribute('context');
+            const attribute = context === CONTEXT_BACKEND ?
+                'backendValues'
+                : 'frontendValues';
+            const values = this.getAttribute(attribute);
 
             if (Switch.getStatus()) {
-                values[currency] = 1;
-            } else {
-                if (currency in values) {
-                    delete values[currency];
+                values[currency] = true;
+            } else if (Object.prototype.hasOwnProperty.call(values, currency)) {
+                delete values[currency];
+            }
+
+            this.setAttribute(attribute, values);
+
+            if (context === CONTEXT_FRONTEND) {
+                this.update();
+            }
+
+            return this.setAllowedCurrencies(context, Object.keys(values)).then((result) => {
+                const persistedValues = {};
+
+                result.forEach((entry) => {
+                    persistedValues[entry.code] = true;
+                });
+
+                this.setAttribute(attribute, persistedValues);
+
+                if (context === CONTEXT_FRONTEND) {
+                    this.update();
                 }
-            }
 
-            this.setAttribute('values', values);
-            this.update();
-
-            const PanelNode = this.getElm().getParent('.qui-panel'),
-                Panel = QUI.Controls.getById(PanelNode.get('data-quiid'));
-
-            if (!Panel) {
-                return;
-            }
-
-            if (Panel.getType() !== 'controls/desktop/panels/XML') {
-                return;
-            }
-
-            Panel.save();
+                return this.$Grid.refresh();
+            }).catch(() => this.$loadCurrencyStatus());
         },
 
         /**

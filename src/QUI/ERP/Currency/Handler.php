@@ -31,6 +31,13 @@ class Handler
      */
     const CURRENCY_TYPE_DEFAULT = 'default';
 
+    public const CONTEXT_FRONTEND = 'frontend';
+    public const CONTEXT_BACKEND = 'backend';
+
+    private const CONFIG_FRONTEND_CURRENCIES = 'allowedCurrencies';
+    private const CONFIG_BACKEND_CURRENCIES = 'allowedBackendCurrencies';
+    private const INHERIT_FRONTEND_CURRENCIES = '__frontend__';
+
     /**
      * currency temp list
      *
@@ -287,15 +294,6 @@ class Handler
         }
 
         try {
-            $Config = QUI::getPackage('quiqqer/currency')->getConfig();
-            $allowed = $Config?->getValue('currency', 'allowedCurrencies');
-            if (!is_string($allowed)) {
-                return null;
-            }
-
-            $allowed = explode(',', trim($allowed));
-            $allowed = array_flip($allowed);
-
             $Country = $User->getCountry();
 
             if (!$Country) {
@@ -303,6 +301,11 @@ class Handler
             }
 
             $Currency = $Country->getCurrency();
+            $allowed = [];
+
+            foreach (self::getFrontendCurrencies() as $AllowedCurrency) {
+                $allowed[$AllowedCurrency->getCode()] = true;
+            }
 
             if (isset($allowed[$Currency->getCode()])) {
                 return $Currency;
@@ -319,16 +322,25 @@ class Handler
      *
      * @return Currency[] - [Currency, Currency, Currency]
      */
-    public static function getAllowedCurrencies(): array
+    public static function getAllowedCurrencies(?string $context = null): array
     {
+        if ($context === null) {
+            $context = QUI::isFrontend()
+                ? self::CONTEXT_FRONTEND
+                : self::CONTEXT_BACKEND;
+        }
+
+        if (!in_array($context, [self::CONTEXT_FRONTEND, self::CONTEXT_BACKEND], true)) {
+            throw new QUI\Exception('Invalid currency context: ' . $context);
+        }
+
         try {
-            $Config = QUI::getPackage('quiqqer/currency')->getConfig();
-            $allowed = $Config?->getValue('currency', 'allowedCurrencies');
-            if (!is_string($allowed)) {
+            $allowed = self::getAllowedCurrencyCodes($context);
+
+            if ($allowed === null) {
                 return [];
             }
 
-            $allowed = explode(',', trim($allowed));
             $list = [];
             $defaultCurrency = self::getDefaultCurrency();
 
@@ -357,11 +369,114 @@ class Handler
     }
 
     /**
+     * Return currencies that may be selected in the frontend.
+     *
+     * @return Currency[]
+     */
+    public static function getFrontendCurrencies(): array
+    {
+        return self::getAllowedCurrencies(self::CONTEXT_FRONTEND);
+    }
+
+    /**
+     * Return currencies that remain available for backend workflows and filters.
+     *
+     * @return Currency[]
+     */
+    public static function getBackendCurrencies(): array
+    {
+        return self::getAllowedCurrencies(self::CONTEXT_BACKEND);
+    }
+
+    /**
+     * Persist the active currencies for one application context.
+     *
+     * @param string $context
+     * @param array<array-key, mixed> $currencies
+     * @throws QUI\Exception
+     */
+    public static function setAllowedCurrencies(string $context, array $currencies): void
+    {
+        QUI\Permissions\Permission::checkPermission('currency.edit');
+
+        $configKey = match ($context) {
+            self::CONTEXT_FRONTEND => self::CONFIG_FRONTEND_CURRENCIES,
+            self::CONTEXT_BACKEND => self::CONFIG_BACKEND_CURRENCIES,
+            default => throw new QUI\Exception('Invalid currency context: ' . $context)
+        };
+
+        $normalized = [];
+
+        foreach ($currencies as $currency) {
+            if (!is_string($currency) || trim($currency) === '') {
+                throw new QUI\Exception('Invalid currency code.');
+            }
+
+            $Currency = self::getCurrency(trim($currency));
+            $normalized[$Currency->getCode()] = true;
+        }
+
+        $DefaultCurrency = self::getDefaultCurrency();
+
+        if ($DefaultCurrency instanceof Currency) {
+            $normalized[$DefaultCurrency->getCode()] = true;
+        }
+
+        $Config = QUI::getPackage('quiqqer/currency')->getConfig();
+
+        if ($Config === null) {
+            throw new QUI\Exception('Currency configuration is unavailable.');
+        }
+
+        $Config->setValue('currency', $configKey, implode(',', array_keys($normalized)));
+        $Config->save();
+
+        self::clearCaches();
+    }
+
+    /**
+     * @return list<string>|null
+     * @throws QUI\Exception
+     */
+    private static function getAllowedCurrencyCodes(string $context): ?array
+    {
+        $Config = QUI::getPackage('quiqqer/currency')->getConfig();
+        $allowed = $Config?->getValue('currency', self::CONFIG_FRONTEND_CURRENCIES);
+
+        if ($context === self::CONTEXT_BACKEND) {
+            $backendCurrencies = $Config?->getValue('currency', self::CONFIG_BACKEND_CURRENCIES);
+
+            if (
+                is_string($backendCurrencies)
+                && $backendCurrencies !== self::INHERIT_FRONTEND_CURRENCIES
+            ) {
+                $allowed = $backendCurrencies;
+            }
+        }
+
+        if (!is_string($allowed)) {
+            return null;
+        }
+
+        $result = [];
+
+        foreach (explode(',', $allowed) as $currency) {
+            $currency = trim($currency);
+
+            if ($currency !== '') {
+                $result[$currency] = true;
+            }
+        }
+
+        return array_keys($result);
+    }
+
+    /**
      * Check if a currency may be used in the frontend.
      */
     private static function isAllowedCurrency(Currency $Currency): bool
     {
-        foreach (self::getAllowedCurrencies() as $AllowedCurrency) {
+        foreach (self::getFrontendCurrencies() as $AllowedCurrency) {
             if ($AllowedCurrency->getCode() === $Currency->getCode()) {
                 return true;
             }

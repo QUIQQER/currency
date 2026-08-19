@@ -21,6 +21,10 @@
                     <type><![CDATA[string]]></type>
                     <defaultvalue>EUR,USD,GBP,CHF</defaultvalue>
                 </conf>
+                <conf name="allowedBackendCurrencies">
+                    <type><![CDATA[string]]></type>
+                    <defaultvalue>__frontend__</defaultvalue>
+                </conf>
                 <conf name="differentAccountingCurrencies">
                     <type><![CDATA[bool]]></type>
                     <defaultvalue>0</defaultvalue>

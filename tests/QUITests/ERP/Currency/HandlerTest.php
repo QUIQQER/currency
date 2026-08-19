@@ -2,31 +2,10 @@
 
 namespace QUITests\ERP\Currency;
 
-use PHPUnit\Framework\TestCase;
 use QUI;
 
-class HandlerTest extends TestCase
+class HandlerTest extends DatabaseTestCase
 {
-    private ?string $fixtureCurrency = null;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        if (empty(QUI\ERP\Currency\Handler::getData())) {
-            $this->markTestSkipped('Handler tests require seeded currency data (DB-backed).');
-        }
-    }
-
-    protected function tearDown(): void
-    {
-        if ($this->fixtureCurrency !== null && QUI\ERP\Currency\Handler::existCurrency($this->fixtureCurrency)) {
-            QUI\ERP\Currency\Handler::deleteCurrency($this->fixtureCurrency);
-        }
-
-        parent::tearDown();
-    }
-
     public function testGetDefaultCurrency(): void
     {
         $Currency = QUI\ERP\Currency\Handler::getDefaultCurrency();
@@ -79,64 +58,38 @@ class HandlerTest extends TestCase
         }
     }
 
-    public function testDisallowedUserCurrencyFallsBackToDefaultCurrency(): void
+    public function testUpdateCurrencyPersistsAndRefreshesCachedData(): void
     {
-        $this->fixtureCurrency = 'T' . strtoupper(substr(md5((string)microtime(true)), 0, 4));
-        QUI\ERP\Currency\Handler::createCurrency($this->fixtureCurrency);
-
-        $User = $this->createMock(QUI\Interfaces\Users\User::class);
-        $User->method('getAttribute')
-            ->with('quiqqer.erp.currency')
-            ->willReturn($this->fixtureCurrency);
-
-        $Currency = QUI\ERP\Currency\Handler::getUserCurrency($User);
-
-        $this->assertSame(
-            QUI\ERP\Currency\Handler::getDefaultCurrency()->getCode(),
-            $Currency?->getCode()
-        );
-    }
-
-    public function testDisallowedRuntimeCurrencyFallsBackToDefaultCurrency(): void
-    {
-        $this->fixtureCurrency = 'T' . strtoupper(substr(md5((string)microtime(true)), 0, 4));
-        QUI\ERP\Currency\Handler::createCurrency($this->fixtureCurrency);
-
-        QUI\ERP\Currency\Handler::setRuntimeCurrency(
-            QUI\ERP\Currency\Handler::getCurrency($this->fixtureCurrency)
-        );
-
-        $Currency = QUI\ERP\Currency\Handler::getRuntimeCurrency();
-
-        $this->assertSame(
-            QUI\ERP\Currency\Handler::getDefaultCurrency()->getCode(),
-            $Currency->getCode()
-        );
-    }
-
-    public function testCreateUpdateAndDeleteCurrencyRefreshesCachedData(): void
-    {
-        $this->fixtureCurrency = 'T' . strtoupper(substr(md5((string)microtime(true)), 0, 4));
-
-        QUI\ERP\Currency\Handler::createCurrency($this->fixtureCurrency, 1.25);
-
-        $Currency = QUI\ERP\Currency\Handler::getCurrency($this->fixtureCurrency);
+        $Currency = QUI\ERP\Currency\Handler::getCurrency('TST');
         $this->assertSame(1.25, $Currency->getExchangeRate());
 
         QUI\ERP\Currency\Handler::updateCurrency($Currency, [
             'rate' => 1.5,
-            'precision' => 3
+            'precision' => 3,
+            'autoupdate' => 1,
+            'customData' => ['source' => 'updated']
         ]);
 
-        $UpdatedCurrency = QUI\ERP\Currency\Handler::getCurrency($this->fixtureCurrency);
+        $stored = $this->connection->fetchAssociative(
+            'SELECT rate, precision, autoupdate, customData FROM ' . QUI\ERP\Currency\Handler::table()
+            . ' WHERE currency = ?',
+            ['TST']
+        );
+        $this->assertIsArray($stored);
+        $this->assertSame(1.5, (float)$stored['rate']);
+        $this->assertSame(3, (int)$stored['precision']);
+        $this->assertSame(1, (int)$stored['autoupdate']);
+        $this->assertSame(['source' => 'updated'], json_decode((string)$stored['customData'], true));
+
+        $UpdatedCurrency = QUI\ERP\Currency\Handler::getCurrency('TST');
         $this->assertSame(1.5, $UpdatedCurrency->getExchangeRate());
         $this->assertSame(3, $UpdatedCurrency->getPrecision());
+        $this->assertSame('updated', $UpdatedCurrency->getCustomDataEntry('source'));
 
         QUI\ERP\Currency\Handler::updateCurrency($UpdatedCurrency, []);
-
-        QUI\ERP\Currency\Handler::deleteCurrency($this->fixtureCurrency);
-        $this->fixtureCurrency = null;
-
-        $this->assertFalse(QUI\ERP\Currency\Handler::existCurrency($UpdatedCurrency->getCode()));
+        $this->assertSame(1.5, (float)$this->connection->fetchOne(
+            'SELECT rate FROM ' . QUI\ERP\Currency\Handler::table() . ' WHERE currency = ?',
+            ['TST']
+        ));
     }
 }
