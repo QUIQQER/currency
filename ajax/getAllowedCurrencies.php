@@ -13,6 +13,10 @@
 QUI::getAjax()->registerFunction(
     'package_quiqqer_currency_ajax_getAllowedCurrencies',
     function ($context = null) {
+        if ($context === '') {
+            $context = null;
+        }
+
         $allowed = QUI\ERP\Currency\Handler::getAllowedCurrencies($context);
         $result = [];
 

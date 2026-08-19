@@ -69,7 +69,8 @@ class AjaxEndpointsTest extends DatabaseTestCase
             'getAllowedCurrencies.php',
             'package_quiqqer_currency_ajax_getAllowedCurrencies',
             ['context'],
-            false
+            false,
+            ''
         );
         self::assertSame(['USD', 'GBP', 'EUR'], array_column($implicitFrontend, 'code'));
 
