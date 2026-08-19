@@ -136,6 +136,12 @@ class AjaxEndpointsTest extends DatabaseTestCase
             ]], JSON_THROW_ON_ERROR)
         );
 
+        if (!class_exists('QUI\ERP\Money\Price')) {
+            self::assertSame([], $result);
+
+            return;
+        }
+
         self::assertCount(1, $result);
         self::assertSame('line-1', $result[0]['id']);
         self::assertSame(
