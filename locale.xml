@@ -137,6 +137,14 @@
             <de><![CDATA[Aktiv]]></de>
             <en><![CDATA[Active]]></en>
         </locale>
+        <locale name="grid.setting.frontend">
+            <de><![CDATA[Frontend]]></de>
+            <en><![CDATA[Frontend]]></en>
+        </locale>
+        <locale name="grid.setting.backend">
+            <de><![CDATA[Backend]]></de>
+            <en><![CDATA[Backend]]></en>
+        </locale>
         <locale name="grid.setting.update">
             <de><![CDATA[Auto-Update]]></de>
             <en><![CDATA[Auto update]]></en>
