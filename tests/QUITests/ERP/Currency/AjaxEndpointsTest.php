@@ -81,7 +81,7 @@ class AjaxEndpointsTest extends DatabaseTestCase
             false,
             Handler::CONTEXT_BACKEND
         );
-        self::assertSame(['TST', 'EUR'], array_column($backend, 'code'));
+        self::assertSame(['QCTST', 'EUR'], array_column($backend, 'code'));
 
         $types = $this->invokeEndpoint(
             'getCurrencyTypes.php',
@@ -107,7 +107,7 @@ class AjaxEndpointsTest extends DatabaseTestCase
             CacheManager::$Config = $originalConfig;
         }
 
-        self::assertSame(['EUR', 'USD', 'GBP', 'TST'], array_keys($currencies));
+        self::assertSame(['EUR', 'USD', 'GBP', 'QCTST'], array_keys($currencies));
     }
 
     public function testConversionEndpointsReturnConvertedAmountsAndDisplayValues(): void
@@ -152,19 +152,19 @@ class AjaxEndpointsTest extends DatabaseTestCase
         self::assertNotSame('', $result[0]['convertedRound']);
     }
 
-    public function testUpdateEndpointsPersistOnlyToSqliteFixture(): void
+    public function testUpdateEndpointsPersistOnlyToDatabaseFixture(): void
     {
         $this->invokeEndpoint(
             'setAutoupdate.php',
             'package_quiqqer_currency_ajax_setAutoupdate',
             ['currency', 'autoupdate'],
             'Permission::checkAdminUser',
-            'TST',
+            'QCTST',
             1
         );
         self::assertSame(1, (int)$this->connection->fetchOne(
             'SELECT autoupdate FROM ' . Handler::table() . ' WHERE currency = ?',
-            ['TST']
+            ['QCTST']
         ));
 
         $this->invokeEndpoint(
@@ -172,7 +172,7 @@ class AjaxEndpointsTest extends DatabaseTestCase
             'package_quiqqer_currency_ajax_update',
             ['currency', 'code', 'rate', 'precision', 'type', 'customData'],
             'Permission::checkAdminUser',
-            'TST',
+            'QCTST',
             'IGNORED',
             2.75,
             5,
@@ -182,7 +182,7 @@ class AjaxEndpointsTest extends DatabaseTestCase
 
         $stored = $this->connection->fetchAssociative(
             'SELECT rate, precision, customData FROM ' . Handler::table() . ' WHERE currency = ?',
-            ['TST']
+            ['QCTST']
         );
         self::assertIsArray($stored);
         self::assertSame(2.75, (float)$stored['rate']);
@@ -206,13 +206,13 @@ class AjaxEndpointsTest extends DatabaseTestCase
             ['context', 'currencies'],
             'Permission::checkAdminUser',
             Handler::CONTEXT_BACKEND,
-            json_encode(['TST'], JSON_THROW_ON_ERROR)
+            json_encode(['QCTST'], JSON_THROW_ON_ERROR)
         );
 
         self::assertSame('GBP,EUR', $this->configValues['allowedCurrencies']);
-        self::assertSame('TST,EUR', $this->configValues['allowedBackendCurrencies']);
+        self::assertSame('QCTST,EUR', $this->configValues['allowedBackendCurrencies']);
         self::assertSame(['GBP', 'EUR'], array_column($frontend, 'code'));
-        self::assertSame(['TST', 'EUR'], array_column($backend, 'code'));
+        self::assertSame(['QCTST', 'EUR'], array_column($backend, 'code'));
         self::assertSame(2, $this->configSaveCount);
     }
 
@@ -256,7 +256,7 @@ class AjaxEndpointsTest extends DatabaseTestCase
                 'package_quiqqer_currency_ajax_setUserCurrency',
                 ['currency'],
                 false,
-                'TST'
+                'QCTST'
             );
             $this->invokeEndpoint(
                 'setUserCurrency.php',
@@ -302,7 +302,7 @@ class AjaxEndpointsTest extends DatabaseTestCase
         ));
     }
 
-    public function testImportEndpointRefreshesPreseededEcbCurrenciesInSqlite(): void
+    public function testImportEndpointRefreshesPreseededEcbCurrencies(): void
     {
         $rates = (new \ReflectionMethod(QUI\ERP\Currency\Import::class, 'getECBData'))->invoke(null);
 
@@ -345,7 +345,7 @@ class AjaxEndpointsTest extends DatabaseTestCase
         $this->configValues = [
             'defaultCurrency' => 'EUR',
             'allowedCurrencies' => 'USD,GBP',
-            'allowedBackendCurrencies' => 'TST'
+            'allowedBackendCurrencies' => 'QCTST'
         ];
         $this->configSaveCount = 0;
         $Config = $this->createMock(QUI\Config::class);

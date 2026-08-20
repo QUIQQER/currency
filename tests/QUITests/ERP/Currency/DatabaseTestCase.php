@@ -11,11 +11,15 @@ use QUI\ERP\Currency\Handler;
 use QUI\Permissions\Permission;
 use QUI\Update;
 use ReflectionProperty;
+use RuntimeException;
+use Throwable;
 
 abstract class DatabaseTestCase extends TestCase
 {
     protected Connection $connection;
     private Connection $originalConnection;
+    private bool $ownsTestConnection = false;
+    private bool $ownsCiTransaction = false;
     private mixed $originalPermissionUser;
     private bool $originalCacheNoClearing;
     private ?QUI\Package\Manager $originalPackageManager;
@@ -36,13 +40,26 @@ abstract class DatabaseTestCase extends TestCase
         $this->originalEventsManager = QUI::$Events;
         $this->originalSessionCurrency = QUI::getSession()->get('currency');
         $this->originalHandlerState = $this->getHandlerState();
-        $this->connection = DriverManager::getConnection([
-            'driver' => 'pdo_sqlite',
-            'memory' => true
-        ]);
+
+        if (DatabaseEnvironment::usesCiDatabase()) {
+            $this->connection = $this->originalConnection;
+
+            if ($this->connection->isTransactionActive()) {
+                throw new RuntimeException('Currency CI tests require a database connection without an active transaction.');
+            }
+
+            $this->connection->beginTransaction();
+            $this->ownsCiTransaction = true;
+        } else {
+            $this->connection = DriverManager::getConnection([
+                'driver' => 'pdo_sqlite',
+                'memory' => true
+            ]);
+            $this->ownsTestConnection = true;
+            $this->setConnection($this->connection);
+        }
 
         try {
-            $this->setConnection($this->connection);
             Permission::setUser(QUI::getUsers()->getSystemUser());
             CacheManager::$noClearing = true;
             $this->setHandlerState([
@@ -51,11 +68,20 @@ abstract class DatabaseTestCase extends TestCase
                 'RuntimeCurrency' => null
             ]);
 
-            Update::importDatabase(dirname(__DIR__, 4) . '/database.xml');
+            if ($this->ownsTestConnection) {
+                Update::importDatabase(dirname(__DIR__, 4) . '/database.xml');
+            } else {
+                $this->connection->delete(Handler::table(), []);
+            }
+
             $this->insertCurrencyFixtures();
-        } catch (\Throwable $Exception) {
+        } catch (Throwable $Exception) {
+            $this->cleanupDatabase();
             $this->restoreGlobalState();
-            $this->connection->close();
+
+            if ($this->ownsTestConnection) {
+                $this->connection->close();
+            }
 
             throw $Exception;
         }
@@ -63,8 +89,15 @@ abstract class DatabaseTestCase extends TestCase
 
     protected function tearDown(): void
     {
-        $this->restoreGlobalState();
-        $this->connection->close();
+        try {
+            $this->cleanupDatabase();
+        } finally {
+            $this->restoreGlobalState();
+
+            if ($this->ownsTestConnection) {
+                $this->connection->close();
+            }
+        }
 
         parent::tearDown();
     }
@@ -105,11 +138,25 @@ abstract class DatabaseTestCase extends TestCase
             $this->currencyFixture('EUR', 1.0),
             $this->currencyFixture('USD', 1.2),
             $this->currencyFixture('GBP', 0.8),
-            $this->currencyFixture('TST', 1.25, 0, 4, '{"source":"fixture"}')
+            $this->currencyFixture('QCTST', 1.25, 0, 4, '{"source":"fixture"}')
             ] as $fixture
         ) {
             $this->connection->insert(Handler::table(), $fixture);
         }
+    }
+
+    private function cleanupDatabase(): void
+    {
+        if (!$this->ownsCiTransaction) {
+            return;
+        }
+
+        if (!$this->connection->isTransactionActive()) {
+            throw new RuntimeException('The currency CI fixture transaction ended before PHPUnit cleanup.');
+        }
+
+        $this->connection->rollBack();
+        $this->ownsCiTransaction = false;
     }
 
     private function restoreGlobalState(): void

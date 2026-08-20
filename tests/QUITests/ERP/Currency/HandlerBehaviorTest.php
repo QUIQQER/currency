@@ -40,12 +40,12 @@ class HandlerBehaviorTest extends DatabaseTestCase
 
     public function testDataNormalizationAndCurrencyLookupVariants(): void
     {
-        $this->connection->insert(Handler::table(), $this->currencyFixture('INV', 2.0, 1, 2, '{invalid'));
+        $this->connection->insert(Handler::table(), $this->currencyFixture('QCINV', 2.0, 1, 2, '{invalid'));
         $this->resetHandlerState();
 
         $data = Handler::getData();
-        self::assertSame([], $data['INV']['customData']);
-        self::assertSame('default', $data['INV']['type']);
+        self::assertSame([], $data['QCINV']['customData']);
+        self::assertSame('default', $data['QCINV']['type']);
 
         $Currency = Handler::getCurrency(['code' => 'USD']);
         self::assertSame('USD', $Currency->getCode());
@@ -65,7 +65,7 @@ class HandlerBehaviorTest extends DatabaseTestCase
         self::assertSame('USD', Handler::getUserCurrency($AllowedUser)?->getCode());
 
         $DisallowedUser = $this->createMock(QUI\Interfaces\Users\User::class);
-        $DisallowedUser->method('getAttribute')->with('quiqqer.erp.currency')->willReturn('TST');
+        $DisallowedUser->method('getAttribute')->with('quiqqer.erp.currency')->willReturn('QCTST');
         self::assertSame('EUR', Handler::getUserCurrency($DisallowedUser)?->getCode());
 
         $UnknownUser = $this->createMock(QUI\Interfaces\Users\User::class);
@@ -97,13 +97,13 @@ class HandlerBehaviorTest extends DatabaseTestCase
         $this->setHandlerState(['RuntimeCurrency' => null]);
         self::assertSame('EUR', Handler::getRuntimeCurrency()->getCode());
 
-        Handler::setRuntimeCurrency(Handler::getCurrency('TST'));
+        Handler::setRuntimeCurrency(Handler::getCurrency('QCTST'));
         self::assertSame('EUR', Handler::getRuntimeCurrency()->getCode());
     }
 
     public function testFrontendAndBackendCurrencyActivationAreIndependent(): void
     {
-        $this->configurePackage('EUR', 'USD', 'GBP,TST');
+        $this->configurePackage('EUR', 'USD', 'GBP,QCTST');
         $this->resetHandlerState();
 
         self::assertSame(
@@ -111,12 +111,12 @@ class HandlerBehaviorTest extends DatabaseTestCase
             array_map(static fn(Currency $Currency): string => $Currency->getCode(), Handler::getFrontendCurrencies())
         );
         self::assertSame(
-            ['GBP', 'TST', 'EUR'],
+            ['GBP', 'QCTST', 'EUR'],
             array_map(static fn(Currency $Currency): string => $Currency->getCode(), Handler::getBackendCurrencies())
         );
 
         $BackendOnlyUser = $this->createMock(QUI\Interfaces\Users\User::class);
-        $BackendOnlyUser->method('getAttribute')->with('quiqqer.erp.currency')->willReturn('TST');
+        $BackendOnlyUser->method('getAttribute')->with('quiqqer.erp.currency')->willReturn('QCTST');
         self::assertSame('EUR', Handler::getUserCurrency($BackendOnlyUser)?->getCode());
 
         $this->configurePackage('EUR', 'USD,GBP', '__frontend__');
@@ -168,16 +168,16 @@ class HandlerBehaviorTest extends DatabaseTestCase
         $this->resetHandlerState();
 
         Handler::setAllowedCurrencies(Handler::CONTEXT_FRONTEND, [' GBP ', 'GBP']);
-        Handler::setAllowedCurrencies(Handler::CONTEXT_BACKEND, ['TST']);
+        Handler::setAllowedCurrencies(Handler::CONTEXT_BACKEND, ['QCTST']);
 
         self::assertSame('GBP,EUR', $values['allowedCurrencies']);
-        self::assertSame('TST,EUR', $values['allowedBackendCurrencies']);
+        self::assertSame('QCTST,EUR', $values['allowedBackendCurrencies']);
         self::assertSame(
             ['GBP', 'EUR'],
             array_map(static fn(Currency $Currency): string => $Currency->getCode(), Handler::getFrontendCurrencies())
         );
         self::assertSame(
-            ['TST', 'EUR'],
+            ['QCTST', 'EUR'],
             array_map(static fn(Currency $Currency): string => $Currency->getCode(), Handler::getBackendCurrencies())
         );
     }
@@ -226,6 +226,10 @@ class HandlerBehaviorTest extends DatabaseTestCase
 
     public function testDatabaseReadFailureReturnsEmptyCurrencyData(): void
     {
+        if (DatabaseEnvironment::usesCiDatabase()) {
+            self::markTestSkipped('Dropping the shared CI currency table is intentionally restricted to local SQLite.');
+        }
+
         $this->connection->createSchemaManager()->dropTable(Handler::table());
         $this->resetHandlerState();
 
@@ -247,8 +251,8 @@ class HandlerBehaviorTest extends DatabaseTestCase
             CacheManager::$Config = $originalConfig;
         }
 
-        self::assertSame(['EUR', 'USD', 'GBP', 'TST'], array_keys($currencies));
-        self::assertSame('fixture', $currencies['TST']['customData']['source']);
+        self::assertSame(['EUR', 'USD', 'GBP', 'QCTST'], array_keys($currencies));
+        self::assertSame('fixture', $currencies['QCTST']['customData']['source']);
     }
 
     public function testCustomCurrencyProviderControlsHydrationAndUpdates(): void
@@ -288,22 +292,22 @@ class HandlerBehaviorTest extends DatabaseTestCase
         self::assertSame('Test currency', $types[0]['typeTitle']);
 
         $this->connection->insert(Handler::table(), [
-            ...$this->currencyFixture('CUS', 2.5),
+            ...$this->currencyFixture('QCCUS', 2.5),
             'type' => 'test'
         ]);
         $this->resetHandlerState();
-        self::assertInstanceOf(TestCurrency::class, Handler::getCurrency('CUS'));
+        self::assertInstanceOf(TestCurrency::class, Handler::getCurrency('QCCUS'));
 
-        Handler::updateCurrency('TST', ['type' => 'test']);
+        Handler::updateCurrency('QCTST', ['type' => 'test']);
         self::assertSame('test', $this->connection->fetchOne(
             'SELECT type FROM ' . Handler::table() . ' WHERE currency = ?',
-            ['TST']
+            ['QCTST']
         ));
 
-        Handler::updateCurrency('TST', ['type' => 'missing']);
+        Handler::updateCurrency('QCTST', ['type' => 'missing']);
         self::assertSame('test', $this->connection->fetchOne(
             'SELECT type FROM ' . Handler::table() . ' WHERE currency = ?',
-            ['TST']
+            ['QCTST']
         ));
     }
 

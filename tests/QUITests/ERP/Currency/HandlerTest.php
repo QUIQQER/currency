@@ -60,7 +60,7 @@ class HandlerTest extends DatabaseTestCase
 
     public function testUpdateCurrencyPersistsAndRefreshesCachedData(): void
     {
-        $Currency = QUI\ERP\Currency\Handler::getCurrency('TST');
+        $Currency = QUI\ERP\Currency\Handler::getCurrency('QCTST');
         $this->assertSame(1.25, $Currency->getExchangeRate());
 
         QUI\ERP\Currency\Handler::updateCurrency($Currency, [
@@ -73,7 +73,7 @@ class HandlerTest extends DatabaseTestCase
         $stored = $this->connection->fetchAssociative(
             'SELECT rate, precision, autoupdate, customData FROM ' . QUI\ERP\Currency\Handler::table()
             . ' WHERE currency = ?',
-            ['TST']
+            ['QCTST']
         );
         $this->assertIsArray($stored);
         $this->assertSame(1.5, (float)$stored['rate']);
@@ -81,7 +81,7 @@ class HandlerTest extends DatabaseTestCase
         $this->assertSame(1, (int)$stored['autoupdate']);
         $this->assertSame(['source' => 'updated'], json_decode((string)$stored['customData'], true));
 
-        $UpdatedCurrency = QUI\ERP\Currency\Handler::getCurrency('TST');
+        $UpdatedCurrency = QUI\ERP\Currency\Handler::getCurrency('QCTST');
         $this->assertSame(1.5, $UpdatedCurrency->getExchangeRate());
         $this->assertSame(3, $UpdatedCurrency->getPrecision());
         $this->assertSame('updated', $UpdatedCurrency->getCustomDataEntry('source'));
@@ -89,7 +89,7 @@ class HandlerTest extends DatabaseTestCase
         QUI\ERP\Currency\Handler::updateCurrency($UpdatedCurrency, []);
         $this->assertSame(1.5, (float)$this->connection->fetchOne(
             'SELECT rate FROM ' . QUI\ERP\Currency\Handler::table() . ' WHERE currency = ?',
-            ['TST']
+            ['QCTST']
         ));
     }
 }
