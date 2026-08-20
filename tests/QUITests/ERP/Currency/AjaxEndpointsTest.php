@@ -107,7 +107,9 @@ class AjaxEndpointsTest extends DatabaseTestCase
             CacheManager::$Config = $originalConfig;
         }
 
-        self::assertSame(['EUR', 'USD', 'GBP', 'QCTST'], array_keys($currencies));
+        $currencyCodes = array_keys($currencies);
+        sort($currencyCodes);
+        self::assertSame(['EUR', 'GBP', 'QCTST', 'USD'], $currencyCodes);
     }
 
     public function testConversionEndpointsReturnConvertedAmountsAndDisplayValues(): void
@@ -181,7 +183,8 @@ class AjaxEndpointsTest extends DatabaseTestCase
         );
 
         $stored = $this->connection->fetchAssociative(
-            'SELECT rate, precision, customData FROM ' . Handler::table() . ' WHERE currency = ?',
+            'SELECT rate, ' . $this->connection->quoteIdentifier('precision') . ', customData FROM '
+            . $this->connection->quoteIdentifier(Handler::table()) . ' WHERE currency = ?',
             ['QCTST']
         );
         self::assertIsArray($stored);
@@ -320,10 +323,7 @@ class AjaxEndpointsTest extends DatabaseTestCase
                 continue;
             }
 
-            $this->connection->insert(
-                Handler::table(),
-                $this->currencyFixture($code, (float)$rate)
-            );
+            $this->insertCurrencyFixture($this->currencyFixture($code, (float)$rate));
         }
 
         $this->resetHandlerState();

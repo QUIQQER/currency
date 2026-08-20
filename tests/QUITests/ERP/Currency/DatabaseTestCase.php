@@ -141,8 +141,24 @@ abstract class DatabaseTestCase extends TestCase
             $this->currencyFixture('QCTST', 1.25, 0, 4, '{"source":"fixture"}')
             ] as $fixture
         ) {
-            $this->connection->insert(Handler::table(), $fixture);
+            $this->insertCurrencyFixture($fixture);
         }
+    }
+
+    /** @param array<string, mixed> $fixture */
+    protected function insertCurrencyFixture(array $fixture): void
+    {
+        $QueryBuilder = $this->connection->createQueryBuilder()
+            ->insert($this->connection->quoteIdentifier(Handler::table()));
+
+        foreach ($fixture as $column => $value) {
+            $parameter = 'value_' . $column;
+            $QueryBuilder
+                ->setValue($this->connection->quoteIdentifier($column), ':' . $parameter)
+                ->setParameter($parameter, $value);
+        }
+
+        $QueryBuilder->executeStatement();
     }
 
     private function cleanupDatabase(): void

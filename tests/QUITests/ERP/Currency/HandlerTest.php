@@ -71,8 +71,8 @@ class HandlerTest extends DatabaseTestCase
         ]);
 
         $stored = $this->connection->fetchAssociative(
-            'SELECT rate, precision, autoupdate, customData FROM ' . QUI\ERP\Currency\Handler::table()
-            . ' WHERE currency = ?',
+            'SELECT rate, ' . $this->connection->quoteIdentifier('precision') . ', autoupdate, customData FROM '
+            . $this->connection->quoteIdentifier(QUI\ERP\Currency\Handler::table()) . ' WHERE currency = ?',
             ['QCTST']
         );
         $this->assertIsArray($stored);

@@ -40,7 +40,7 @@ class HandlerBehaviorTest extends DatabaseTestCase
 
     public function testDataNormalizationAndCurrencyLookupVariants(): void
     {
-        $this->connection->insert(Handler::table(), $this->currencyFixture('QCINV', 2.0, 1, 2, '{invalid'));
+        $this->insertCurrencyFixture($this->currencyFixture('QCINV', 2.0, 1, 2, '{invalid'));
         $this->resetHandlerState();
 
         $data = Handler::getData();
@@ -251,7 +251,9 @@ class HandlerBehaviorTest extends DatabaseTestCase
             CacheManager::$Config = $originalConfig;
         }
 
-        self::assertSame(['EUR', 'USD', 'GBP', 'QCTST'], array_keys($currencies));
+        $currencyCodes = array_keys($currencies);
+        sort($currencyCodes);
+        self::assertSame(['EUR', 'GBP', 'QCTST', 'USD'], $currencyCodes);
         self::assertSame('fixture', $currencies['QCTST']['customData']['source']);
     }
 
@@ -291,7 +293,7 @@ class HandlerBehaviorTest extends DatabaseTestCase
         self::assertSame('test', $types[0]['type']);
         self::assertSame('Test currency', $types[0]['typeTitle']);
 
-        $this->connection->insert(Handler::table(), [
+        $this->insertCurrencyFixture([
             ...$this->currencyFixture('QCCUS', 2.5),
             'type' => 'test'
         ]);
