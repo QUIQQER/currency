@@ -49,10 +49,7 @@ class ImportTest extends DatabaseTestCase
                 continue;
             }
 
-            $this->connection->insert(
-                QUI\ERP\Currency\Handler::table(),
-                $this->currencyFixture($code, (float)$rate)
-            );
+            $this->insertCurrencyFixture($this->currencyFixture($code, (float)$rate));
         }
 
         $this->resetHandlerState();
